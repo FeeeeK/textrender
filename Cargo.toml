@@ -1,0 +1,44 @@
+[package]
+edition = "2024"
+name = "textrender"
+version = "0.1.0"
+
+[dependencies]
+crossbeam-queue = "0.3.12"
+eldenring = "0.5.1"
+eldenring-util = "0.5.1"
+hudhook = "0.8.1"
+pelite = "0.10.0"
+
+tracing = "0.1.41"
+tracing-appender = "0.2.3"
+tracing-panic = "0.1.2"
+
+[dependencies.retour]
+features = ["static-detour"]
+version = "0.3.1"
+
+[dependencies.windows]
+features = ["Win32_System_Console", "Win32_UI_WindowsAndMessaging"]
+version = "0.61.1"
+
+[dependencies.tracing-subscriber]
+features = ["env-filter"]
+version = "0.3.19"
+
+[dependencies.nalgebra]
+version = "0.32"
+
+[dependencies.nalgebra-glm]
+version = "0.18"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+codegen-units = 1
+debug = true
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
