@@ -6,4 +6,4 @@ The game's original debug text rendering is non-functional. This mod intercepts 
 
 ## Credits
 
-@vswarte for the EzDraw text rendering function RVA.
+[@vswarte](https://github.com/vswarte) for the EzDraw text rendering function RVA.
