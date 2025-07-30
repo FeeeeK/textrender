@@ -4,6 +4,7 @@ use std::{
     hash::{Hash, Hasher},
     mem::transmute,
     sync::LazyLock,
+    time::Duration,
 };
 
 use eldenring::{
@@ -14,10 +15,13 @@ use eldenring_util::{program::Program, singleton::get_instance, system::wait_for
 
 use crate::logging::{custom_panic_hook, setup_logging};
 use crossbeam_queue::ArrayQueue;
-use eldenring::pointer::OwnedPtr;
 use hudhook::{
-    Hudhook, ImguiRenderLoop,
+    Hudhook, ImguiRenderLoop, RenderContext,
     imgui::{self, FontGlyphRanges, Ui},
+    windows::Win32::{
+        Foundation::HINSTANCE,
+        System::{LibraryLoader::DisableThreadLibraryCalls, SystemServices::DLL_PROCESS_ATTACH},
+    },
 };
 use hudhook::{hooks::dx12::ImguiDx12Hooks, imgui::Context};
 use pelite::pe::Pe;
@@ -57,11 +61,11 @@ const RESET_TEXT_SCALE_RVA: u32 = 0xbb6290;
 const DRAW_TEXT_WITH_SIZE_RVA: u32 = 0x264eec0;
 
 static_detour! {
-    static DrawTextRenderRequest: unsafe extern "C" fn(usize, OwnedPtr<HavokPosition>, *const u16) -> ();
+    static DrawTextRenderRequest: unsafe extern "C" fn(usize, *mut HavokPosition, *const u16) -> ();
     static SetFontSize: unsafe extern "C" fn(usize, f32) -> ();
     static SetTextScale: unsafe extern "C" fn(usize, f32, f32, f32) -> ();
     static ResetTextScale: unsafe extern "C" fn(usize) -> ();
-    static DrawTextWithSize: unsafe extern "C" fn(usize, OwnedPtr<HavokPosition>, OwnedPtr<f32>, *const u16) -> ();
+    static DrawTextWithSize: unsafe extern "C" fn(usize, *mut HavokPosition, *mut f32, *const u16) -> ();
 }
 
 struct DebugTextRender {
@@ -129,9 +133,11 @@ impl DebugTextRender {
 }
 
 impl ImguiRenderLoop for DebugTextRender {
-    fn initialize(&mut self, ctx: &mut Context, _render_context: &mut dyn hudhook::RenderContext) {
+    fn initialize(&mut self, ctx: &mut Context, _render_context: &mut dyn RenderContext) {
+        let font_data = std::fs::read("C:\\Windows\\Fonts\\msgothic.ttc")
+            .expect("Failed to read font file (msgothic.ttc)");
         ctx.fonts().add_font(&[imgui::FontSource::TtfData {
-            data: include_bytes!("C:\\Windows\\Fonts\\msgothic.ttc"),
+            data: &font_data,
             size_pixels: BASE_IMGUI_FONT_SIZE_PX,
             config: Some(imgui::FontConfig {
                 oversample_h: 3,
@@ -234,17 +240,15 @@ fn init() {
     unsafe {
         DrawTextRenderRequest
             .initialize(
-                transmute::<u64, unsafe extern "C" fn(usize, OwnedPtr<HavokPosition>, *const u16)>(
+                transmute::<u64, unsafe extern "C" fn(usize, *mut HavokPosition, *const u16)>(
                     text_request_va,
                 ),
-                |_ez_draw: usize, pos: OwnedPtr<HavokPosition>, text: *const u16| {
+                |_ez_draw: usize, pos: *mut HavokPosition, text: *const u16| {
                     let text_str = u16_ptr_to_string(text);
-                    let x = pos.0;
-                    let y = pos.1;
+                    let x = (*pos).0;
+                    let y = (*pos).1;
 
-                    TEXT_RENDER_QUEUE
-                        .push(DrawCommand::Text(text_str, x, y))
-                        .expect("Unable to push text to queue");
+                    TEXT_RENDER_QUEUE.force_push(DrawCommand::Text(text_str, x, y));
                 },
             )
             .unwrap()
@@ -258,9 +262,7 @@ fn init() {
                 transmute::<u64, unsafe extern "C" fn(usize, f32)>(set_font_size_va),
                 |ez_draw: usize, font_size: f32| {
                     SetFontSize.call(ez_draw, font_size);
-                    TEXT_RENDER_QUEUE
-                        .push(DrawCommand::SetFontSize(font_size))
-                        .expect("Unable to push font size to queue");
+                    TEXT_RENDER_QUEUE.force_push(DrawCommand::SetFontSize(font_size));
                 },
             )
             .unwrap()
@@ -274,13 +276,11 @@ fn init() {
                 transmute::<u64, unsafe extern "C" fn(usize, f32, f32, f32)>(set_text_scale_va),
                 |ez_draw: usize, width_scale: f32, height_scale: f32, font_size: f32| {
                     SetTextScale.call(ez_draw, width_scale, height_scale, font_size);
-                    TEXT_RENDER_QUEUE
-                        .push(DrawCommand::SetTextScale(
-                            width_scale,
-                            height_scale,
-                            font_size,
-                        ))
-                        .expect("Unable to push text scale to queue");
+                    TEXT_RENDER_QUEUE.force_push(DrawCommand::SetTextScale(
+                        width_scale,
+                        height_scale,
+                        font_size,
+                    ));
                 },
             )
             .unwrap()
@@ -294,9 +294,7 @@ fn init() {
                 transmute::<u64, unsafe extern "C" fn(usize)>(reset_text_scale_va),
                 |ez_draw: usize| {
                     ResetTextScale.call(ez_draw);
-                    TEXT_RENDER_QUEUE
-                        .push(DrawCommand::ResetTextScale)
-                        .expect("Unable to push reset text scale to queue");
+                    TEXT_RENDER_QUEUE.force_push(DrawCommand::ResetTextScale);
                 },
             )
             .unwrap()
@@ -309,24 +307,20 @@ fn init() {
             .initialize(
                 transmute::<
                     u64,
-                    unsafe extern "C" fn(usize, OwnedPtr<HavokPosition>, OwnedPtr<f32>, *const u16),
+                    unsafe extern "C" fn(usize, *mut HavokPosition, *mut f32, *const u16),
                 >(draw_text_with_size_va),
                 |_ez_draw: usize,
-                 pos: OwnedPtr<HavokPosition>,
-                 font_size_ptr: OwnedPtr<f32>,
+                 pos: *mut HavokPosition,
+                 font_size_ptr: *mut f32,
                  text: *const u16| {
                     let text_str = u16_ptr_to_string(text);
-                    let x = pos.0;
-                    let y = pos.1;
+                    let x = (*pos).0;
+                    let y = (*pos).1;
 
                     let font_size = *font_size_ptr;
-                    TEXT_RENDER_QUEUE
-                        .push(DrawCommand::SetFontSize(font_size))
-                        .expect("Unable to push text to queue");
+                    TEXT_RENDER_QUEUE.force_push(DrawCommand::SetFontSize(font_size));
 
-                    TEXT_RENDER_QUEUE
-                        .push(DrawCommand::Text(text_str, x, y))
-                        .expect("Unable to push text to queue");
+                    TEXT_RENDER_QUEUE.force_push(DrawCommand::Text(text_str, x, y));
                 },
             )
             .unwrap()
@@ -335,7 +329,8 @@ fn init() {
     }
 
     std::thread::spawn(|| {
-        wait_for_system_init(-1).expect("System initialization timed out");
+        let program = Program::current();
+        wait_for_system_init(&program, Duration::MAX).expect("System initialization timed out");
 
         if let Err(e) = Hudhook::builder()
             .with::<ImguiDx12Hooks>(DebugTextRender::new())
@@ -354,8 +349,10 @@ fn init() {
 /// during DLL loading, unloading, and thread attach/detach events.
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
-pub unsafe extern "C" fn DllMain(_hinst: usize, reason: u32, _reserved: usize) -> bool {
-    if reason == 1 {
+pub unsafe extern "C" fn DllMain(hinst: HINSTANCE, reason: u32, _reserved: usize) -> bool {
+    if reason == DLL_PROCESS_ATTACH {
+        unsafe { DisableThreadLibraryCalls(hinst).ok() };
+
         init();
     };
     true

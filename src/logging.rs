@@ -1,9 +1,12 @@
+use hudhook::windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use tracing_panic::panic_hook;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Layer, layer::SubscriberExt};
 
-use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MB_TASKMODAL, MessageBoxW};
-use windows::core::PCWSTR;
+use hudhook::windows::Win32::UI::WindowsAndMessaging::{
+    MB_ICONERROR, MB_OK, MB_TASKMODAL, MessageBoxW,
+};
+use hudhook::windows::core::PCWSTR;
 
 pub fn show_error_message_box(message: String, title: &str) {
     let mut message_utf16: Vec<u16> = message.encode_utf16().collect();
@@ -45,12 +48,11 @@ pub fn custom_panic_hook(panic_info: &std::panic::PanicHookInfo) {
 }
 
 pub fn setup_logging() {
-    // unsafe {
-    //     windows::Win32::System::Console::AttachConsole(
-    //         windows::Win32::System::Console::ATTACH_PARENT_PROCESS,
-    //     )
-    //     .unwrap();
-    // }
+    // Try to attach to the parent console if it exists
+    if unsafe { AttachConsole(ATTACH_PARENT_PROCESS) }.is_err() {
+        return;
+    }
+
     let filter = tracing_subscriber::filter::EnvFilter::from_default_env()
         .add_directive(tracing_subscriber::filter::LevelFilter::DEBUG.into());
 
