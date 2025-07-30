@@ -49,9 +49,7 @@ pub fn custom_panic_hook(panic_info: &std::panic::PanicHookInfo) {
 
 pub fn setup_logging() {
     // Try to attach to the parent console if it exists
-    if unsafe { AttachConsole(ATTACH_PARENT_PROCESS) }.is_err() {
-        return;
-    }
+    unsafe { AttachConsole(ATTACH_PARENT_PROCESS) }.ok();
 
     let filter = tracing_subscriber::filter::EnvFilter::from_default_env()
         .add_directive(tracing_subscriber::filter::LevelFilter::DEBUG.into());
