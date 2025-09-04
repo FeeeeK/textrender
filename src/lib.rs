@@ -50,15 +50,15 @@ fn u16_ptr_to_string(ptr: *const u16) -> String {
 }
 
 // void FUN_14264ef60(CSEzDraw *param_1,FloatVector4 *param_2,wchar_t *param_3)
-const TEXT_RENDER_REQUEST_RVA: u32 = 0x264ef60;
+const TEXT_RENDER_REQUEST_RVA: u32 = 0x264efc0;
 // void CS::CSEzDraw::SetFontSize(CSEzDraw *param_1,float fontSize)
-const SET_FONT_SIZE_RVA: u32 = 0xbb6310;
+const SET_FONT_SIZE_RVA: u32 = 0xbb6370;
 // void CS::CSEzDraw::SetTextScale(CSEzDraw *param_1,float textPosWidthScate,float textPosHeightScate,float fontSize)
 const SET_TEXT_SCALE_RVA: u32 = 0x1def10;
 // void CS::CSEzDraw::ResetTextScale(CSEzDraw *param_1)
-const RESET_TEXT_SCALE_RVA: u32 = 0xbb6290;
+const RESET_TEXT_SCALE_RVA: u32 = 0xbb62f0;
 // void CS::CSEzDraw::DrawTextWithSize(CSEzDraw *param_1,FloatVector4 *param_2,float *param_3,wchar_t *param_4)
-const DRAW_TEXT_WITH_SIZE_RVA: u32 = 0x264eec0;
+const DRAW_TEXT_WITH_SIZE_RVA: u32 = 0x264ef20;
 
 static_detour! {
     static DrawTextRenderRequest: unsafe extern "C" fn(usize, *mut HavokPosition, *const u16) -> ();
