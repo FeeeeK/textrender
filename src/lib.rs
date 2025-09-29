@@ -200,17 +200,20 @@ impl ImguiRenderLoop for DebugTextRender {
                             ui.text(text);
                         });
                 }
-                DrawCommand::SetFontSize(scale) => {
+                DrawCommand::SetFontSize(mut scale) => {
+                    if scale == 0.0 {
+                        scale = BASE_IMGUI_FONT_SIZE_PX;
+                    }
                     tracing::debug!("Font size: {}", scale);
                     self.font_size = scale;
                 }
 
-                DrawCommand::SetTextScale(mut width_scale, mut height_scale, _font_size) => {
+                DrawCommand::SetTextScale(mut width_scale, mut height_scale, font_size) => {
                     tracing::debug!(
                         "Width scale: {}, Height scale: {}, Font size: {}",
                         width_scale,
                         height_scale,
-                        _font_size
+                        font_size
                     );
 
                     let (aspect_w, aspect_h) = Self::get_aspect_ratios();
@@ -220,7 +223,12 @@ impl ImguiRenderLoop for DebugTextRender {
                     if width_scale != self.text_scale.0 || height_scale != self.text_scale.1 {
                         self.text_scale = (width_scale, height_scale);
                     }
-                    self.font_size = _font_size;
+
+                    self.font_size = if font_size == 0.0 {
+                        BASE_IMGUI_FONT_SIZE_PX
+                    } else {
+                        font_size
+                    };
                 }
                 DrawCommand::ResetTextScale => {
                     tracing::debug!("Reset text scale");
@@ -318,7 +326,12 @@ fn init() {
                     let y = (*pos).1;
 
                     let font_size = *font_size_ptr;
-                    TEXT_RENDER_QUEUE.force_push(DrawCommand::SetFontSize(font_size));
+                    let push_font = if font_size == 0.0 {
+                        BASE_IMGUI_FONT_SIZE_PX
+                    } else {
+                        font_size
+                    };
+                    TEXT_RENDER_QUEUE.force_push(DrawCommand::SetFontSize(push_font));
 
                     TEXT_RENDER_QUEUE.force_push(DrawCommand::Text(text_str, x, y));
                 },
